@@ -1,5 +1,6 @@
-import { parse, serialize } from './index';
+import { Pln } from './index';
 import * as fs from 'fs';
+const { parse, stringify: serialize } = Pln;
 declare const process: { exit: (code: number) => void };
 
 let passed = 0, failed = 0;

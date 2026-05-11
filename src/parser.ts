@@ -1,4 +1,4 @@
-import { PopLineError } from './types';
+import { PlnError } from './types';
 
 export function parse(text: string): unknown {
   const frames: Array<Record<string, unknown> | unknown[]> = [];
@@ -46,12 +46,12 @@ export function parse(text: string): unknown {
     }
 
     const rest = line.slice(valueStart);
-    if (rest.length === 0) throw new PopLineError('bare pop line');
+    if (rest.length === 0) throw new PlnError('bare pop line');
 
     if (frames.length === 0) {
       if (rest === '{') { frames.push({}); stack.push('object'); continue; }
       if (rest === '[') { frames.push([]); stack.push('array'); continue; }
-      throw new PopLineError('top level must be { or [');
+      throw new PlnError('top level must be { or [');
     }
 
     const top = frames[frames.length - 1];
@@ -59,9 +59,9 @@ export function parse(text: string): unknown {
 
     if (topType === 'object') {
       const sep = rest.indexOf(': ');
-      if (sep < 0) throw new PopLineError(`object line must be 'key: value': ${rest}`);
+      if (sep < 0) throw new PlnError(`object line must be 'key: value': ${rest}`);
       const key = rest.slice(0, sep);
-      if (!isKeyValid(key)) throw new PopLineError(`invalid key: ${key}`);
+      if (!isKeyValid(key)) throw new PlnError(`invalid key: ${key}`);
       const valPart = rest.slice(sep + 2);
 
       currentKey = key;
@@ -118,7 +118,7 @@ function parseScalar(s: string): unknown {
       if (!isNaN(n)) return n;
     }
   }
-  throw new PopLineError(`bare string must be quoted: ${s}`);
+  throw new PlnError(`bare string must be quoted: ${s}`);
 }
 
 function parseQuoted(content: string): string {
@@ -130,7 +130,7 @@ function parseQuoted(content: string): string {
         result += '"'; i += 2;
       } else {
         const after = content.slice(i + 1);
-        if (after.trim().length > 0) throw new PopLineError('trailing content after quote');
+        if (after.trim().length > 0) throw new PlnError('trailing content after quote');
         return result;
       }
     } else {
@@ -138,7 +138,7 @@ function parseQuoted(content: string): string {
     }
   }
   // multi-line
-  throw new PopLineError('multi-line strings not supported in single-line parser mode');
+  throw new PlnError('multi-line strings not supported in single-line parser mode');
 }
 
 function handleStringLine(line: string): string | undefined {
@@ -150,7 +150,7 @@ function handleStringLine(line: string): string | undefined {
         result += '"'; i += 2;
       } else {
         const after = line.slice(i + 1);
-        if (after.trim().length > 0) throw new PopLineError('trailing content after quote');
+        if (after.trim().length > 0) throw new PlnError('trailing content after quote');
         return result;
       }
     } else {
