@@ -28,8 +28,8 @@ Data: `package.json` (17011 B) / `package.pln` (13074 B, 76.9%)
 
 | Operation | JSON (built-in) | popline-js | Ratio |
 |-----------|----------------|------------|-------|
-| Parse | 410 ms | 3306 ms | 8.06x |
-| Serialize | 235 ms | 2401 ms | 10.20x |
+| Parse | 410 ms (82 µs/op) | 3306 ms (661 µs/op) | 8.06x |
+| Serialize | 235 ms (47 µs/op) | 2401 ms (480 µs/op) | 10.20x |
 
 ## Build
 
