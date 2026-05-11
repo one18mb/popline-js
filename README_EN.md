@@ -13,13 +13,13 @@ npm install popline-js
 ## Usage
 
 ```typescript
-import { parse, serialize } from 'popline-js';
+import { Pln } from 'popline-js';
 
 // Parse
-const obj = parse('{\nkey: "value"\n');
+const obj = Pln.parse('{\nkey: "value"\n');
 
 // Serialize
-const text = serialize({ key: 'value' });
+const text = Pln.stringify({ key: 'value' });
 ```
 
 ## Performance
