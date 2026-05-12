@@ -1,5 +1,31 @@
 import { PlnError } from './types';
 
+/* ─── Pop suffix helpers ─── */
+
+/** Extract trailing " N" pop suffix from leaf value content */
+function trimPopSuffix(content: string): {value: string, pop: number} {
+  if (content.length < 2) return {value: content, pop: 0};
+  let i = content.length - 1;
+  if (content[i] < '0' || content[i] > '9') return {value: content, pop: 0};
+  while (i > 0 && content[i - 1] >= '0' && content[i - 1] <= '9') i--;
+  if (i === 0 || content[i - 1] !== ' ') return {value: content, pop: 0};
+  const val = content.slice(0, i - 1);
+  if (val.length === 0) return {value: content, pop: 0};
+  return {value: val, pop: parseInt(content.slice(i), 10)};
+}
+
+/** Validate content after a closing `"` for multi-line string pop suffix.
+ *  Returns -1 for invalid content, 0 for empty (no pop), or N for valid " N" suffix. */
+function popSuffixAfter(s: string): number {
+  if (s.length === 0) return 0;
+  if (s[0] !== ' ') return -1;
+  if (s.length < 2 || s[1] < '0' || s[1] > '9') return -1;
+  for (let i = 1; i < s.length; i++) {
+    if (s[i] < '0' || s[i] > '9') return -1;
+  }
+  return parseInt(s.slice(1), 10);
+}
+
 function parseInlineContainers(
   s: string,
   frames: Array<Record<string, unknown> | unknown[]>,
@@ -60,9 +86,17 @@ export function parse(text: string): unknown {
         inString = false;
         const top = frames[frames.length - 1];
         if (stack[stack.length - 1] === 'object') {
-          (top as Record<string, unknown>)[currentKey!] = result;
+          (top as Record<string, unknown>)[currentKey!] = result.value;
         } else {
-          (top as unknown[]).push(result);
+          (top as unknown[]).push(result.value);
+        }
+        if (result.pop > 0) {
+          let n = result.pop;
+          if (n >= frames.length) n = frames.length - 1;
+          for (let p = 0; p < n; p++) {
+            frames.pop();
+            stack.pop();
+          }
         }
         strbuf = '';
       }
@@ -71,16 +105,24 @@ export function parse(text: string): unknown {
 
     if (line.length === 0) continue;
 
-    // pop prefix
+    // pop prefix — only for containers and key:value lines
     let nPop = 0;
     let valueStart = 0;
     let i = 0;
     while (i < line.length && line[i] >= '0' && line[i] <= '9') i++;
     if (i > 0 && i < line.length && line[i] === ' ') {
-      nPop = parseInt(line.slice(0, i), 10);
-      valueStart = i + 1;
+      const afterPop = line.slice(i + 1).trimStart();
+      if (afterPop.length > 0) {
+        const nc = afterPop[0];
+        if (nc === '{' || nc === '[' || afterPop.includes(':')) {
+          nPop = parseInt(line.slice(0, i), 10);
+          valueStart = i + 1;
+        }
+      }
     }
 
+    // root protection: never pop the last frame
+    if (nPop >= frames.length) nPop = frames.length - 1;
     for (let p = 0; p < nPop; p++) {
       frames.pop();
       stack.pop();
@@ -111,9 +153,20 @@ export function parse(text: string): unknown {
       if (sep < 0) throw new PlnError(`object line must be 'key: value': ${rest}`);
       const key = rest.slice(0, sep);
       if (!isKeyValid(key)) throw new PlnError(`invalid key: ${key}`);
-      const valPart = rest.slice(sep + 2);
+      const valPartRaw = rest.slice(sep + 2);
 
       currentKey = key;
+
+      // Pop suffix for leaf values (not containers)
+      let valPart = valPartRaw;
+      let valSuffixPop = 0;
+      if (valPart.length > 0 && valPart[0] !== '{' && valPart[0] !== '[') {
+        const result = trimPopSuffix(valPart);
+        valPart = result.value;
+        valSuffixPop = result.pop;
+      }
+      if (valPart.length === 0) continue;
+
       // Check value inline containers: `key: [ [` or `key: [ {`
       if (valPart.length > 1 && (valPart[0] === '[' || valPart[0] === '{')) {
         const trimmed = valPart.slice(1).trimStart();
@@ -133,25 +186,49 @@ export function parse(text: string): unknown {
       } else {
         (top as Record<string, unknown>)[key] = parseScalar(valPart);
       }
+      if (valSuffixPop > 0) {
+        if (valSuffixPop >= frames.length) valSuffixPop = frames.length - 1;
+        for (let p = 0; p < valSuffixPop; p++) {
+          frames.pop();
+          stack.pop();
+        }
+      }
     } else {
+      // Array element pop suffix for leaf values
+      let arrVal = rest;
+      let arrSuffixPop = 0;
+      if (arrVal.length > 0 && arrVal[0] !== '{' && arrVal[0] !== '[') {
+        const result = trimPopSuffix(arrVal);
+        arrVal = result.value;
+        arrSuffixPop = result.pop;
+      }
+      if (arrVal.length === 0) continue;
+
       // Check array element inline containers: `[ [`、`[ {`、`{ [`、`{ {`
-      if (rest.length > 1 && (rest[0] === '[' || rest[0] === '{')) {
-        const trimmed = rest.slice(1).trimStart();
+      if (arrVal.length > 1 && (arrVal[0] === '[' || arrVal[0] === '{')) {
+        const trimmed = arrVal.slice(1).trimStart();
         if (trimmed.length > 0 && (trimmed[0] === '[' || trimmed[0] === '{')) {
-          parseInlineContainers(rest, frames, stack, null);
+          parseInlineContainers(arrVal, frames, stack, null);
           continue;
         }
       }
-      if (rest === '{') {
+      if (arrVal === '{') {
         const obj: Record<string, unknown> = {};
         (top as unknown[]).push(obj);
         frames.push(obj); stack.push('object');
-      } else if (rest === '[') {
+      } else if (arrVal === '[') {
         const arr: unknown[] = [];
         (top as unknown[]).push(arr);
         frames.push(arr); stack.push('array');
       } else {
-        (top as unknown[]).push(parseScalar(rest));
+        (top as unknown[]).push(parseScalar(arrVal));
+      }
+      if (arrSuffixPop > 0) {
+        if (arrSuffixPop >= frames.length) arrSuffixPop = frames.length - 1;
+        for (let p = 0; p < arrSuffixPop; p++) {
+          frames.pop();
+          stack.pop();
+        }
       }
     }
   }
@@ -206,7 +283,7 @@ function parseQuoted(content: string): string {
   throw new PlnError('multi-line strings not supported in single-line parser mode');
 }
 
-function handleStringLine(line: string): string | undefined {
+function handleStringLine(line: string): {value: string, pop: number} | undefined {
   let result = '';
   let i = 0;
   while (i < line.length) {
@@ -215,8 +292,12 @@ function handleStringLine(line: string): string | undefined {
         result += '"'; i += 2;
       } else {
         const after = line.slice(i + 1);
-        if (after.trim().length > 0) throw new PlnError('trailing content after quote');
-        return result;
+        if (after.length > 0) {
+          const nPop = popSuffixAfter(after);
+          if (nPop < 0) throw new PlnError('trailing content after quote');
+          return {value: result, pop: nPop};
+        }
+        return {value: result, pop: 0};
       }
     } else {
       result += line[i]; i++;

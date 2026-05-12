@@ -94,11 +94,14 @@ export function serialize(value: unknown): string {
   function putScalar(s: string) {
     if (stack.length > 0 && stack[stack.length - 1] === 'object') {
       awaitingValue = false;
-      buf.push(s, '\n');
+      buf.push(s);
+      flushPop();
+      buf.push('\n');
       needKey = true;
     } else {
+      buf.push(s);
       flushPop();
-      buf.push(s, '\n');
+      buf.push('\n');
     }
   }
 
@@ -106,15 +109,15 @@ export function serialize(value: unknown): string {
     if (stack.length > 0 && stack[stack.length - 1] === 'object') {
       awaitingValue = false;
       needKey = true;
-    } else {
-      flushPop();
     }
     buf.push('"');
     for (const c of s) {
       buf.push(c);
       if (c === '"') buf.push('"');
     }
-    buf.push('"', '\n');
+    buf.push('"');
+    flushPop();
+    buf.push('\n');
   }
 
   writeValue(value);
