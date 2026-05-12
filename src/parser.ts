@@ -162,8 +162,8 @@ export function parse(text: string): unknown {
 function isKeyValid(key: string): boolean {
   if (key.length === 0) return false;
   for (const c of key) {
-    if (c === ':' || c === '"' || c === '{' || c === '}' ||
-        c === '[' || c === ']' || c === '#' ||
+    if (c === ':' || c === '"' || c === '{' ||
+        c === '[' || c === '#' ||
         c === ' ' || c === '\t') return false;
   }
   return true;
