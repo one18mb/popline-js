@@ -2,16 +2,22 @@ import { PlnError } from './types';
 
 /* ─── Pop suffix helpers ─── */
 
-/** Extract trailing " N" pop suffix from leaf value content */
+/** Forward-scan for " N" pop suffix: when space found, check if rest is all digits */
 function trimPopSuffix(content: string): {value: string, pop: number} {
-  if (content.length < 2) return {value: content, pop: 0};
-  let i = content.length - 1;
-  if (content[i] < '0' || content[i] > '9') return {value: content, pop: 0};
-  while (i > 0 && content[i - 1] >= '0' && content[i - 1] <= '9') i--;
-  if (i === 0 || content[i - 1] !== ' ') return {value: content, pop: 0};
-  const val = content.slice(0, i - 1);
-  if (val.length === 0) return {value: content, pop: 0};
-  return {value: val, pop: parseInt(content.slice(i), 10)};
+  let inString = false;
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === '"') inString = !inString;
+    if (!inString && content[i] === ' ') {
+      let allDigits = true;
+      for (let j = i + 1; j < content.length; j++) {
+        if (content[j] < '0' || content[j] > '9') { allDigits = false; break; }
+      }
+      if (allDigits && i + 1 < content.length) {
+        return {value: content.slice(0, i), pop: parseInt(content.slice(i + 1), 10)};
+      }
+    }
+  }
+  return {value: content, pop: 0};
 }
 
 /** Validate content after a closing `"` for multi-line string pop suffix.
@@ -105,31 +111,7 @@ export function parse(text: string): unknown {
 
     if (line.length === 0) continue;
 
-    // pop prefix — only for containers and key:value lines
-    let nPop = 0;
-    let valueStart = 0;
-    let i = 0;
-    while (i < line.length && line[i] >= '0' && line[i] <= '9') i++;
-    if (i > 0 && i < line.length && line[i] === ' ') {
-      const afterPop = line.slice(i + 1).trimStart();
-      if (afterPop.length > 0) {
-        const nc = afterPop[0];
-        if (nc === '{' || nc === '[' || afterPop.includes(':')) {
-          nPop = parseInt(line.slice(0, i), 10);
-          valueStart = i + 1;
-        }
-      }
-    }
-
-    // root protection: never pop the last frame
-    if (nPop >= frames.length) nPop = frames.length - 1;
-    for (let p = 0; p < nPop; p++) {
-      frames.pop();
-      stack.pop();
-    }
-
-    const rest = line.slice(valueStart);
-    if (rest.length === 0) throw new PlnError('bare pop line');
+    const rest = line;
 
     if (frames.length === 0) {
       // Check top-level inline containers: `[ [` or `[ {`

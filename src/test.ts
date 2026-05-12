@@ -27,10 +27,10 @@ test('null', obj4?.c === null);
 const obj5 = parse('{\nouter: {\ninner: "value"\n') as any;
 test('nested', obj5?.outer?.inner === 'value');
 
-const obj6 = parse('{\nouter: {\ninner: "x"\n1 mid: "y"\n') as any;
+const obj6 = parse('{\nouter: {\ninner: "x" 1\nmid: "y"\n') as any;
 test('pop 1', obj6?.mid === 'y');
 
-const obj7 = parse('{\na: {\nb: {\nc: "deep"\n2 x: "top"\n') as any;
+const obj7 = parse('{\na: {\nb: {\nc: "deep" 2\nx: "top"\n') as any;
 test('pop 2', obj7?.x === 'top');
 
 const obj8 = parse('{\nmsg: "He said: ""Hello"""\n') as any;
