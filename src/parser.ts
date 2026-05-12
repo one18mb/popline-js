@@ -1,5 +1,46 @@
 import { PlnError } from './types';
 
+function parseInlineContainers(
+  s: string,
+  frames: Array<Record<string, unknown> | unknown[]>,
+  stack: Array<'object' | 'array'>,
+  currentKey: string | null,
+): void {
+  let part = s.trimStart();
+  while (part.length > 0) {
+    const ch = part[0];
+    if (ch !== '{' && ch !== '[') throw new PlnError('inline containers must be { or [');
+    if (ch === '{') {
+      const obj: Record<string, unknown> = {};
+      if (frames.length === 0) {
+        frames.push(obj); stack.push('object');
+      } else {
+        const top = frames[frames.length - 1];
+        if (stack[stack.length - 1] === 'object') {
+          (top as Record<string, unknown>)[currentKey || ''] = obj;
+        } else {
+          (top as unknown[]).push(obj);
+        }
+        frames.push(obj); stack.push('object');
+      }
+    } else {
+      const arr: unknown[] = [];
+      if (frames.length === 0) {
+        frames.push(arr); stack.push('array');
+      } else {
+        const top = frames[frames.length - 1];
+        if (stack[stack.length - 1] === 'object') {
+          (top as Record<string, unknown>)[currentKey || ''] = arr;
+        } else {
+          (top as unknown[]).push(arr);
+        }
+        frames.push(arr); stack.push('array');
+      }
+    }
+    part = part.slice(1).trimStart();
+  }
+}
+
 export function parse(text: string): unknown {
   const frames: Array<Record<string, unknown> | unknown[]> = [];
   const stack: Array<'object' | 'array'> = [];
@@ -49,6 +90,14 @@ export function parse(text: string): unknown {
     if (rest.length === 0) throw new PlnError('bare pop line');
 
     if (frames.length === 0) {
+      // Check top-level inline containers: `[ [` or `[ {`
+      if (rest.length > 1 && rest[0] === '[') {
+        const trimmed = rest.slice(1).trimStart();
+        if (trimmed.length > 0 && (trimmed[0] === '[' || trimmed[0] === '{')) {
+          parseInlineContainers(rest, frames, stack, null);
+          continue;
+        }
+      }
       if (rest === '{') { frames.push({}); stack.push('object'); continue; }
       if (rest === '[') { frames.push([]); stack.push('array'); continue; }
       throw new PlnError('top level must be { or [');
@@ -65,6 +114,14 @@ export function parse(text: string): unknown {
       const valPart = rest.slice(sep + 2);
 
       currentKey = key;
+      // Check value inline containers: `key: [ [` or `key: [ {`
+      if (valPart.length > 1 && (valPart[0] === '[' || valPart[0] === '{')) {
+        const trimmed = valPart.slice(1).trimStart();
+        if (trimmed.length > 0 && (trimmed[0] === '[' || trimmed[0] === '{')) {
+          parseInlineContainers(valPart, frames, stack, key);
+          continue;
+        }
+      }
       if (valPart === '{') {
         const obj: Record<string, unknown> = {};
         (top as Record<string, unknown>)[key] = obj;
@@ -77,6 +134,14 @@ export function parse(text: string): unknown {
         (top as Record<string, unknown>)[key] = parseScalar(valPart);
       }
     } else {
+      // Check array element inline containers: `[ [`、`[ {`、`{ [`、`{ {`
+      if (rest.length > 1 && (rest[0] === '[' || rest[0] === '{')) {
+        const trimmed = rest.slice(1).trimStart();
+        if (trimmed.length > 0 && (trimmed[0] === '[' || trimmed[0] === '{')) {
+          parseInlineContainers(rest, frames, stack, null);
+          continue;
+        }
+      }
       if (rest === '{') {
         const obj: Record<string, unknown> = {};
         (top as unknown[]).push(obj);

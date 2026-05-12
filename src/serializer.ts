@@ -18,13 +18,7 @@ export function serialize(value: unknown): string {
     if (typeof v === 'number') { putScalar(String(v)); return; }
     if (typeof v === 'string') { putString(v); return; }
     if (Array.isArray(v)) {
-      startContainer('[');
-      stack.push('array');
-      needKey = false; awaitingValue = false;
-      for (const item of v) writeValue(item);
-      stack.pop();
-      pendingPop++;
-      if (stack.length > 0 && stack[stack.length - 1] === 'object') needKey = true;
+      writeContainerInline(v, true, '[', 'array');
       return;
     }
     // object
@@ -40,6 +34,50 @@ export function serialize(value: unknown): string {
     stack.pop();
     pendingPop++;
     if (stack.length > 0 && stack[stack.length - 1] === 'object') needKey = true;
+  }
+
+  function writeContainerInline(v: unknown, first: boolean, ch: string, typ: 'object' | 'array'): void {
+    if (first && stack.length > 0 && stack[stack.length - 1] === 'object' && awaitingValue) {
+      buf.push(ch);
+      awaitingValue = false;
+    } else if (first) {
+      flushPop();
+      buf.push(ch);
+    } else {
+      buf.push(ch);
+    }
+
+    const arr = v as unknown[];
+    const canInline = typ === 'array' && arr.length > 0 &&
+      (typeof arr[0] === 'object' && arr[0] !== null && !Array.isArray(arr[0]) || Array.isArray(arr[0]));
+
+    if (canInline) {
+      stack.push('array');
+      needKey = false; awaitingValue = false;
+      writeContainerInline(arr[0], false, Array.isArray(arr[0]) ? '[' : '{', Array.isArray(arr[0]) ? 'array' : 'object');
+      for (let i = 1; i < arr.length; i++) writeValue(arr[i]);
+      stack.pop();
+      pendingPop++;
+      if (stack.length > 0 && stack[stack.length - 1] === 'object') needKey = true;
+    } else {
+      buf.push('\n');
+      stack.push(typ);
+      needKey = (typ === 'object');
+      awaitingValue = false;
+      if (typ === 'object') {
+        for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+          flushPop();
+          buf.push(k, ': ');
+          needKey = false; awaitingValue = true;
+          writeValue(val);
+        }
+      } else {
+        for (const item of v as unknown[]) writeValue(item);
+      }
+      stack.pop();
+      pendingPop++;
+      if (stack.length > 0 && stack[stack.length - 1] === 'object') needKey = true;
+    }
   }
 
   function startContainer(ch: string) {
