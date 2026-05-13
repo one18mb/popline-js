@@ -17,10 +17,81 @@ function popSuffixAfter(s: string): number {
   if (s.length === 0) return 0;
   if (s[0] !== ' ') return -1;
   if (s.length < 2 || s[1] < '0' || s[1] > '9') return -1;
+  let n = 0;
   for (let i = 1; i < s.length; i++) {
-    if (s[i] < '0' || s[i] > '9') return -1;
+    const c = s.charCodeAt(i);
+    if (c < 48 || c > 57) return -1;
+    n = n * 10 + (c - 48);
   }
-  return parseInt(s.slice(1), 10);
+  return n;
+}
+
+function isKeyValid(key: string): boolean {
+  const len = key.length;
+  if (len === 0) return false;
+  for (let i = 0; i < len; i++) {
+    const c = key.charCodeAt(i);
+    if (c === 58 || c === 34 || c === 123 || c === 91 || c === 35 || c === 32 || c === 9) return false;
+  }
+  return true;
+}
+
+function parseQuoted(content: string): string {
+  let parts: string[] = [];
+  let pos = 0;
+  let i = 0;
+  while (i < content.length) {
+    if (content[i] === '"') {
+      if (i + 1 < content.length && content[i + 1] === '"') {
+        parts.push(content.slice(pos, i + 1));
+        pos = i + 2;
+        i += 2;
+      } else {
+        parts.push(content.slice(pos, i));
+        const after = content.slice(i + 1);
+        if (after.trim().length > 0) throw new PlnError('trailing content after quote');
+        return parts.join('');
+      }
+    } else { i++; }
+  }
+  throw new PlnError('multi-line strings not supported');
+}
+
+function parseScalar(s: string): any {
+  if (s.startsWith('"')) return parseQuoted(s.slice(1));
+  if (s === 'true') return true;
+  if (s === 'false') return false;
+  if (s === 'null') return null;
+  const first = s.charCodeAt(0);
+  if (first === 45 || (first >= 48 && first <= 57)) {
+    const n = Number(s);
+    if (!isNaN(n)) return n;
+  }
+  throw new PlnError(`bare string must be quoted: ${s}`);
+}
+
+function handleStringLine(line: string): {value: string, pop: number} | undefined {
+  const parts: string[] = [];
+  let pos = 0, i = 0;
+  while (i < line.length) {
+    if (line[i] === '"') {
+      if (i + 1 < line.length && line[i + 1] === '"') {
+        parts.push(line.slice(pos, i + 1));
+        pos = i + 2;
+        i += 2;
+      } else {
+        parts.push(line.slice(pos, i));
+        const after = line.slice(i + 1);
+        if (after.length > 0) {
+          const nPop = popSuffixAfter(after);
+          if (nPop < 0) throw new PlnError('trailing content after quote');
+          return {value: parts.join(''), pop: nPop};
+        }
+        return {value: parts.join(''), pop: 0};
+      }
+    } else { i++; }
+  }
+  return undefined;
 }
 
 function parseInlineContainers(
@@ -53,62 +124,6 @@ function parseInlineContainers(
   }
 }
 
-function isKeyValid(key: string): boolean {
-  if (key.length === 0) return false;
-  for (const c of key) {
-    if (c === ':' || c === '"' || c === '{' || c === '[' || c === '#' || c === ' ' || c === '\t') return false;
-  }
-  return true;
-}
-
-function parseQuoted(content: string): string {
-  let result = '';
-  let i = 0;
-  while (i < content.length) {
-    if (content[i] === '"') {
-      if (i + 1 < content.length && content[i + 1] === '"') { result += '"'; i += 2; }
-      else {
-        const after = content.slice(i + 1);
-        if (after.trim().length > 0) throw new PlnError('trailing content after quote');
-        return result;
-      }
-    } else { result += content[i]; i++; }
-  }
-  throw new PlnError('multi-line strings not supported in single-line parser mode');
-}
-
-function parseScalar(s: string): any {
-  if (s.startsWith('"')) return parseQuoted(s.slice(1));
-  if (s === 'true') return true;
-  if (s === 'false') return false;
-  if (s === 'null') return null;
-  if (s[0] === '-' || (s[0] >= '0' && s[0] <= '9')) {
-    if (/[.eE]/.test(s)) { const n = Number(s); if (!isNaN(n)) return n; }
-    else { const n = Number(s); if (!isNaN(n)) return n; }
-  }
-  throw new PlnError(`bare string must be quoted: ${s}`);
-}
-
-function handleStringLine(line: string): {value: string, pop: number} | undefined {
-  let result = '';
-  let i = 0;
-  while (i < line.length) {
-    if (line[i] === '"') {
-      if (i + 1 < line.length && line[i + 1] === '"') { result += '"'; i += 2; }
-      else {
-        const after = line.slice(i + 1);
-        if (after.length > 0) {
-          const nPop = popSuffixAfter(after);
-          if (nPop < 0) throw new PlnError('trailing content after quote');
-          return {value: result, pop: nPop};
-        }
-        return {value: result, pop: 0};
-      }
-    } else { result += line[i]; i++; }
-  }
-  return undefined; // still open
-}
-
 export function parse(text: string): any {
   const frames: PlnValue[] = [];
   const stack: Array<'object' | 'array' | 'scalar'> = [];
@@ -116,12 +131,19 @@ export function parse(text: string): any {
   let strbuf = '';
   let currentKey: string | null = null;
 
-  text = text.replace(/\n+$/, '');
-  const lines = text.split('\n');
+  /* Index-based line iteration */
+  let lineStart = 0;
+  const len = text.length;
 
-  for (let li = 0; li < lines.length; li++) {
-    let line = lines[li];
-    if (line.endsWith('\r')) line = line.slice(0, -1);
+  while (lineStart < len) {
+    let nl = lineStart;
+    while (nl < len && text[nl] !== '\n') nl++;
+    let line = text.slice(lineStart, nl);
+    lineStart = nl + 1;
+
+    /* Strip trailing \r */
+    const lineLen = line.length;
+    if (lineLen > 0 && line.charCodeAt(lineLen - 1) === 13) line = line.slice(0, -1);
 
     if (inString) {
       const result = handleStringLine(line);
@@ -130,56 +152,57 @@ export function parse(text: string): any {
         const top = frames[frames.length - 1];
         if (stack[stack.length - 1] === 'object') { (top as any)[currentKey!] = result.value; }
         else { (top as any[]).push(result.value); }
-        if (result.pop > 0) {
-          let n = result.pop;
-          if (n >= frames.length) n = frames.length - 1;
-          for (let p = 0; p < n; p++) { frames.pop(); stack.pop(); }
+        if (result.pop >= frames.length) {
+          result.pop = frames.length - 1;
         }
+        for (let p = 0; p < result.pop; p++) { frames.pop(); stack.pop(); }
         strbuf = '';
       }
+      
       continue;
     }
 
     if (line.length === 0) {
       if (frames.length > 0) throw new PlnError('empty line not allowed in message body');
+      
       continue;
     }
 
-    // pop prefix — only for containers and key:value lines
+    /* pop prefix — only for containers and key:value lines */
     let nPop = 0;
     let valueStart = 0;
-    let i = 0;
-    while (i < line.length && line[i] >= '0' && line[i] <= '9') i++;
-    if (i > 0 && i < line.length && line[i] === ' ') {
-      const afterPop = line.slice(i + 1).trimStart();
-      if (afterPop.length > 0) {
-        const nc = afterPop[0];
-        if (nc === '{' || nc === '[' || afterPop.includes(':')) {
-          nPop = parseInt(line.slice(0, i), 10);
-          valueStart = i + 1;
+    let pi = 0;
+    while (pi < line.length && line.charCodeAt(pi) >= 48 && line.charCodeAt(pi) <= 57) pi++;
+    if (pi > 0 && pi < line.length && line[pi] === ' ') {
+      const nc = pi + 1 < line.length ? line.charCodeAt(pi + 1) : 0;
+      if (nc === 123 || nc === 91) {
+        nPop = parseInt(line.slice(0, pi), 10);
+        valueStart = pi + 1;
+      } else {
+        /* Check if it looks like k: v (has ':') */
+        for (let si = pi + 1; si < line.length; si++) {
+          if (line[si] === ':') { nPop = parseInt(line.slice(0, pi), 10); valueStart = pi + 1; break; }
         }
       }
     }
-    // root protection: never pop the last frame
     if (nPop >= frames.length) nPop = frames.length - 1;
     for (let p = 0; p < nPop; p++) { frames.pop(); stack.pop(); }
 
-    const rest = line.slice(valueStart);
+    const rest = valueStart === 0 ? line : line.slice(valueStart);
     if (rest.length === 0) throw new PlnError('bare pop line');
 
     if (frames.length === 0) {
-      if (rest.length > 1 && rest[0] === '[') {
-        const trimmed = rest.slice(1).trimStart();
-        if (trimmed.length > 0 && (trimmed[0] === '[' || trimmed[0] === '{')) {
+      if (rest.length > 1 && rest.charCodeAt(0) === 91) {
+        let trimmed = 1;
+        while (trimmed < rest.length && (rest[trimmed] === ' ' || rest[trimmed] === '\t')) trimmed++;
+        if (trimmed < rest.length && (rest.charCodeAt(trimmed) === 91 || rest.charCodeAt(trimmed) === 123)) {
           parseInlineContainers(rest, frames, stack, null);
           continue;
         }
       }
       if (rest === '{') { frames.push({} as any); stack.push('object'); continue; }
       if (rest === '[') { frames.push([] as any); stack.push('array'); continue; }
-      // Scalar root
-      const scalar = parseScalar(rest);
-      frames.push(scalar);
+      frames.push(parseScalar(rest));
       stack.push('scalar');
       break;
     }
@@ -197,54 +220,42 @@ export function parse(text: string): any {
 
       let valPart = valPartRaw;
       let valSuffixPop = 0;
-      if (valPart.length > 0 && valPart[0] !== '{' && valPart[0] !== '[') {
-        const result = trimPopSuffix(valPart);
-        valPart = result.value;
-        valSuffixPop = result.pop;
+      if (valPart.charCodeAt(0) !== 123 && valPart.charCodeAt(0) !== 91) {
+        const r = trimPopSuffix(valPart);
+        valPart = r.value; valSuffixPop = r.pop;
       }
-      if (valPart.length === 0) continue;
 
-      if (valPart.length > 1 && (valPart[0] === '[' || valPart[0] === '{')) {
-        const trimmed = valPart.slice(1).trimStart();
-        if (trimmed.length > 0 && (trimmed[0] === '[' || trimmed[0] === '{')) {
-          parseInlineContainers(valPart, frames, stack, key);
-          continue;
-        }
+      if (valPart.charCodeAt(0) === 123 && valPart.length === 1) {
+        const obj: any = {}; (top as any)[key] = obj; frames.push(obj); stack.push('object');
+      } else if (valPart.charCodeAt(0) === 91 && valPart.length === 1) {
+        const arr: any[] = []; (top as any)[key] = arr; frames.push(arr); stack.push('array');
+      } else if (valPart.length > 0) {
+        (top as any)[key] = parseScalar(valPart);
       }
-      if (valPart === '{') { const obj: any = {}; (top as any)[key] = obj; frames.push(obj); stack.push('object'); }
-      else if (valPart === '[') { const arr: any[] = []; (top as any)[key] = arr; frames.push(arr); stack.push('array'); }
-      else { (top as any)[key] = parseScalar(valPart); }
 
-      if (valSuffixPop > 0) {
-        if (valSuffixPop >= frames.length) valSuffixPop = frames.length - 1;
-        for (let p = 0; p < valSuffixPop; p++) { frames.pop(); stack.pop(); }
-      }
+      if (valSuffixPop >= frames.length) valSuffixPop = frames.length - 1;
+      for (let p = 0; p < valSuffixPop; p++) { frames.pop(); stack.pop(); }
     } else {
       let arrVal = rest;
       let arrSuffixPop = 0;
-      if (arrVal.length > 0 && arrVal[0] !== '{' && arrVal[0] !== '[') {
-        const result = trimPopSuffix(arrVal);
-        arrVal = result.value;
-        arrSuffixPop = result.pop;
+      if (arrVal.charCodeAt(0) !== 123 && arrVal.charCodeAt(0) !== 91) {
+        const r = trimPopSuffix(arrVal);
+        arrVal = r.value; arrSuffixPop = r.pop;
       }
-      if (arrVal.length === 0) continue;
 
-      if (arrVal.length > 1 && (arrVal[0] === '[' || arrVal[0] === '{')) {
-        const trimmed = arrVal.slice(1).trimStart();
-        if (trimmed.length > 0 && (trimmed[0] === '[' || trimmed[0] === '{')) {
-          parseInlineContainers(arrVal, frames, stack, null);
-          continue;
-        }
+      if (arrVal.charCodeAt(0) === 123 && arrVal.length === 1) {
+        const obj: any = {}; (top as any[]).push(obj); frames.push(obj); stack.push('object');
+      } else if (arrVal.charCodeAt(0) === 91 && arrVal.length === 1) {
+        const arr: any[] = []; (top as any[]).push(arr); frames.push(arr); stack.push('array');
+      } else if (arrVal.length > 0) {
+        (top as any[]).push(parseScalar(arrVal));
       }
-      if (arrVal === '{') { const obj: any = {}; (top as any[]).push(obj); frames.push(obj); stack.push('object'); }
-      else if (arrVal === '[') { const arr: any[] = []; (top as any[]).push(arr); frames.push(arr); stack.push('array'); }
-      else { (top as any[]).push(parseScalar(arrVal)); }
 
-      if (arrSuffixPop > 0) {
-        if (arrSuffixPop >= frames.length) arrSuffixPop = frames.length - 1;
-        for (let p = 0; p < arrSuffixPop; p++) { frames.pop(); stack.pop(); }
-      }
+      if (arrSuffixPop >= frames.length) arrSuffixPop = frames.length - 1;
+      for (let p = 0; p < arrSuffixPop; p++) { frames.pop(); stack.pop(); }
     }
+
+    
   }
 
   return frames.length > 0 ? frames[0] : null;
