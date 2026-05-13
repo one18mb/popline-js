@@ -42,8 +42,19 @@ test('chinese', obj9?.key === '你好世界');
 const obj10 = parse('{\n中文键: 1\nmy-key: 2\na.b.c: 3\n') as any;
 test('ext keys', obj10?.['中文键'] === 1 && obj10?.['my-key'] === 2);
 
+// Scalar root
+test('int root', parse('42') === 42);
+test('float root', typeof parse('3.14') === 'number');
+test('string root', parse('"hello"') === 'hello');
+test('true root', parse('true') === true);
+test('false root', parse('false') === false);
+test('null root', parse('null') === null);
+test('neg int root', parse('-42') === -42);
+
+// Empty lines
+try { parse('{\n\nkey: 1\n'); test('empty in container', false); } catch { test('empty in container', true); }
+
 // Errors
-try { parse('42\n'); test('err scalar', false); } catch { test('err scalar', true); }
 try { parse('{\nbad:key: 1\n'); test('err key colon', false); } catch { test('err key colon', true); }
 
 // ═══════════════ Roundtrip ═══════════════
@@ -60,6 +71,22 @@ roundtrip('rt-simple', '{\na: 1\n');
 roundtrip('rt-nested', '{\na: {\nb: 1\n1 c: 2\n');
 roundtrip('rt-array', '[\n1\n2\n3\n');
 roundtrip('rt-boolnull', '{\na: true\nb: false\nc: null\n');
+
+// Scalar roundtrips
+function scalarRt(name: string, input: string) {
+  try {
+    const v = parse(input);
+    const s = serialize(v as any);
+    const v2 = parse(s);
+    test(name, JSON.stringify(v) === JSON.stringify(v2));
+  } catch (e: any) { test(name, false, e.message); }
+}
+scalarRt('rt-int', '42');
+scalarRt('rt-float', '3.14');
+scalarRt('rt-string', '"hello"');
+scalarRt('rt-true', 'true');
+scalarRt('rt-false', 'false');
+scalarRt('rt-null', 'null');
 
 // ═══════════════ Real Data Consistency ═══════════════
 
