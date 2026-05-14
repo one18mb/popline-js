@@ -24,7 +24,7 @@ const text = Pln.stringify({ key: 'value' });
 
 ## Performance
 
-Data: `test-package.json` (17011 B) / `test-package.pln` (13074 B, 76.9%)
+Data: `test.json` (17011 B) / `test.pln` (13074 B, 76.9%)
 
 | Operation | JSON (built-in) | popline-js | Ratio |
 |-----------|----------------|------------|-------|
