@@ -10,7 +10,14 @@
     "prepublishOnly": "npm run build"
   },
   "files": [
-    "dist/",
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/parser.js",
+    "dist/parser.d.ts",
+    "dist/serializer.js",
+    "dist/serializer.d.ts",
+    "dist/types.js",
+    "dist/types.d.ts",
     "README.md",
     "LICENSE"
   ],
