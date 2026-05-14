@@ -1,35 +1,37 @@
 # PopLine JS
 
-PopLine 序列化格式的 JavaScript/TypeScript 实现。
+PopLine 序列化格式的 JavaScript/TypeScript 实现。纯 TS，零依赖。
 
 ## 安装
 
 ```bash
-npm install popline-js
+npm install popline
 ```
 
 ## 使用
 
 ```typescript
-import { parse, serialize } from 'popline-js';
+import { Pln } from 'popline';
 
-// 解析
-const obj = parse('{\nkey: "value"\n');
+// PopLine → JS 对象
+const obj = Pln.parse('{\nkey: "value"\n');
+// → { key: "value" }
 
-// 序列化
-const text = serialize({ key: 'value' });
+// JS 对象 → PopLine
+const text = Pln.stringify({ key: "value" });
+// → '{\nkey: "value"\n'
 ```
 
 ## 性能
 
-> 纯 TypeScript 实现，无原生优化。生产环境建议使用 [C 扩展](https://github.com/one18mb/popline-py) 或 [Go 版本](https://github.com/one18mb/popline-go)。
+测试数据：`package.json`（17011 B）→ `package.pln`（13076 B，**76.9%**），2000 次迭代
 
-测试数据：`package.json`（17011 B）→ `package.pln`（13074 B，**76.9%**），5000 次迭代
+| 操作 | JSON (V8 原生) | popline (TS) | 比 |
+|------|---------------|-------------|------|
+| 解析 | 103 µs/op | 425 µs/op | 4.1x |
+| 序列化 | 49 µs/op | — | — |
 
-| 操作 | JSON (built-in) | popline-js | 比 |
-|------|----------------|------------|------|
-| 解析 | 410 ms (82 µs/op) | 3306 ms (661 µs/op) | 8.06x |
-| 序列化 | 235 ms (47 µs/op) | 2401 ms (480 µs/op) | 10.20x |
+V8 的 JSON.parse 为原生 C++ 深度 JIT 优化，PopLine 作为文本序列化格式，核心优势在体积（-23%）和可读性，非运行速度。
 
 ## 构建
 
@@ -40,6 +42,7 @@ npm test
 ```
 
 ## 致谢
+
 本项目的开发得到了以下 AI 工具的大力协助：
 - [Claude Code](https://claude.ai)（Anthropic）
-- [DeepSeek](https://deepseek.com)（深度求索）
+- [DeepSeek](https://deepseek.com）（深度求索）
