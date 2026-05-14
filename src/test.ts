@@ -90,8 +90,8 @@ scalarRt('rt-null', 'null');
 
 // ═══════════════ Real Data Consistency ═══════════════
 
-const jsonPath = 'package-test.json';
-const plnPath = 'package.pln';
+const jsonPath = 'test-package.json';
+const plnPath = 'test-package.pln';
 
 if (fs.existsSync(jsonPath) && fs.existsSync(plnPath)) {
   const jsonText = fs.readFileSync(jsonPath, 'utf-8');
