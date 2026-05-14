@@ -1,6 +1,6 @@
 {
   "name": "popline",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "PopLine — Line-oriented serialization format (TypeScript)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
