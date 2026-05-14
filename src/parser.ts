@@ -31,7 +31,7 @@ function isKeyValid(key: string): boolean {
   if (len === 0) return false;
   for (let i = 0; i < len; i++) {
     const c = key.charCodeAt(i);
-    if (c === 58 || c === 34 || c === 123 || c === 91 || c === 35 || c === 32 || c === 9) return false;
+    if (c === 58 || c === 34 || c === 123 || c === 91 || c === 32 || c === 9) return false;
   }
   return true;
 }
