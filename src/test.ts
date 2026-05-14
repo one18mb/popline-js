@@ -90,7 +90,7 @@ scalarRt('rt-null', 'null');
 
 // ═══════════════ Real Data Consistency ═══════════════
 
-const jsonPath = 'package.json';
+const jsonPath = 'package-test.json';
 const plnPath = 'package.pln';
 
 if (fs.existsSync(jsonPath) && fs.existsSync(plnPath)) {
