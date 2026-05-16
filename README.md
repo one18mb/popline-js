@@ -33,6 +33,10 @@ const text = Pln.stringify({ key: "value" });
 
 V8 的 JSON.parse 为原生 C++ 深度 JIT 优化，PopLine 作为文本序列化格式，核心优势在体积（-23%）和可读性，非运行速度。
 
+## 体验
+
+在线格式转换（PopLine ↔ JSON/YAML/TOML/INI/XML）：[popline-converter](https://one18mb.github.io/popline-converter/)
+
 ## 构建
 
 ```bash
