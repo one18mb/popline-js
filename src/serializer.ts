@@ -21,7 +21,7 @@ export function serialize(value: unknown): string {
     const n = entries.length;
     for (let i = 0; i < n; i++) {
       const [k, val] = entries[i];
-      const childPop = (i === n - 1 && stack.length > 1) ? closePop + 1 : 0;
+      const childPop = (i === n - 1) ? closePop + 1 : 0;
       buf.push(k, ': ');
       needKey = false; awaitingValue = true;
       writeValue(val, childPop);
