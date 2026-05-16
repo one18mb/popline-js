@@ -31,6 +31,10 @@ Data: `test.json` (17011 B) / `test.pln` (13074 B, 76.9%)
 | Parse | 410 ms (82 µs/op) | 3306 ms (661 µs/op) | 8.06x |
 | Serialize | 235 ms (47 µs/op) | 2401 ms (480 µs/op) | 10.20x |
 
+## Try It
+
+Online converter (PopLine ↔ JSON/YAML/TOML/INI/XML): [popline-converter](https://one18mb.github.io/popline-converter/)
+
 ## Build
 
 ```bash
